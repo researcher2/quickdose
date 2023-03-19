@@ -1,0 +1,201 @@
+// WARNING: THE FIRST BLANK LINE MARKS THE END OF WHAT'S TO BE PROCESSED, ANY BLANK LINE SHOULD
+// GO AFTER THE REQUIRES BELOW.
+//
+//= require offline_development
+
+// For documentation please see the README.md
+const general_development = <%= Rails.env == "development" %> && !offline_development
+console.log("general_development", general_development)
+const page_cache_name = "quickdose-v<%=Time.now.to_i%>"
+console.log(page_cache_name)
+
+const vue_pages = [
+  "/",
+]
+
+<%
+  vue_asset_dir_server = "/vue/assets"
+  vue_asset_dir_filesystem = "public/vue/assets"
+  files = Dir.glob("#{vue_asset_dir_filesystem}/*").map {
+    |file|
+    "#{vue_asset_dir_server}/#{File.basename(file)}"
+  }  
+%>
+
+const vue_assets = <%= files %>;
+
+const all_vue_artifacts = new Set([...vue_pages.map(x => self.location.origin + x), 
+                                   ...vue_assets.map(x => self.location.origin + x)]);
+
+const all_caches = [
+  page_cache_name,
+];
+
+
+// Install - Currently used for caching vue pages
+// ==================================================================================
+async function do_install()
+{
+  console.log("installing service worker")
+
+  const new_service_worker = !(await caches.has(page_cache_name))
+  if (new_service_worker)
+  {
+    console.log("new service worker, activating")
+    self.skipWaiting() // Become active worker after install
+  }
+
+  // Don't try caching while logged out as you will just get redirected to login 
+  const await_logged_in_promise = new Promise((resolve, reject) =>
+  {
+    const check_fetch = async () => 
+    {
+      let response = await fetch("/");
+      if (response.redirected)
+        setTimeout(check_fetch, 1000)
+      else
+        resolve()
+    }
+    check_fetch();
+  });
+
+  await await_logged_in_promise
+
+  const cache = await caches.open(page_cache_name);
+  await cache.addAll(vue_pages);
+  await cache.addAll(vue_assets)
+}
+
+self.addEventListener("install", event => event.waitUntil(do_install()));
+
+// Activate - Delete old caches and tell clients to reload
+// ==================================================================================
+async function do_activate()
+{
+  console.log("activating service worker")
+
+  let cache_names = await caches.keys();
+  
+  cache_names = cache_names.filter(cache_name => !all_caches.includes(cache_name));
+
+  console.log("Clearing old caches", cache_names)
+
+  for (const cache_name of cache_names)
+    await caches.delete(cache_name)
+
+  const allClients = await clients.matchAll({
+    includeUncontrolled: true
+  });
+
+  for (const client of allClients) 
+  {  
+    client.postMessage({
+      action: "reload",
+    });
+  }
+}
+
+self.addEventListener('activate', event => event.waitUntil(do_activate()));
+
+// Fetch
+// ==================================================================================
+async function cache_only(cache_name, request_url_stripped_params)
+{
+  const cache = await caches.open(cache_name);
+  const match_result = await cache.match(request_url_stripped_params);
+  return match_result;
+}
+
+async function log_cache(cache_name)
+{
+  const cache = await caches.open(cache_name);
+  const keys = await cache.keys();
+  console.log(keys);
+}
+
+async function cache_first(cache_name, request)
+{
+  const cache_promise = caches.open(cache_name);
+  const fetch_promise = fetch(request);  
+
+  const fetch_path = (async () =>
+  {
+    try
+    {
+      const fetch_response = await fetch_promise;
+      const cache = await cache_promise;
+      cache.put(request.url, fetch_response.clone());
+      return fetch_response;
+    }
+    catch (error)
+    {
+      console.log("network error")
+      return new Response('Network error happened', {
+        status: 408,
+        headers: { 'Content-Type': 'text/plain' },
+      });
+    }
+  })();
+
+  const cache = await cache_promise;
+  const match_result = await cache.match(request.url)
+  if (match_result)
+    return match_result
+  else
+    return fetch_path
+}
+
+async function fetch_with_fallback(request)
+{
+  try
+  {
+    const fetch_response = await fetch(request);
+    return fetch_response;
+  }
+  catch (error)
+  {
+    return Response.redirect(`/offline_vue/network_error?message=${error}`)
+  }
+}
+
+self.addEventListener('fetch', event => 
+{
+  if (general_development)
+    return
+
+  const request = event.request;
+  const request_url = new URL(request.url);
+  const request_url_stripped_params = request_url.origin + request_url.pathname;
+
+  // Fix for Chrome bug?
+  if (request.cache === "only-if-cached" && request.mode !== "same-origin") return;
+
+  // Vue offline pages & assets - cached during install. Ignore query params.
+  if (all_vue_artifacts.has(request_url_stripped_params))
+  {
+    event.respondWith(cache_only(page_cache_name, request_url_stripped_params))
+    return
+  }
+
+  // Regular assets - cache on first site visit
+  if (request.url.includes("/assets"))
+  {      
+    event.respondWith(cache_first(page_cache_name, request));
+    return
+  }
+
+  console.log("No match", request_url.href);
+  event.respondWith(fetch_with_fallback(request))  
+});
+
+self.addEventListener('message', function(event) 
+{
+  if (event.data.action === 'process_push_jobs')
+    event.waitUntil(process_push_jobs(event));
+  else if (event.data.action == "sync_all")
+    event.waitUntil(sync_all(event));
+  else if (event.data.action == "refresh_cache")
+    event.waitUntil(refresh_cache(true));  
+  else if (event.data.action == "clear_dexie_database")
+    event.waitUntil(clear_dexie_database(event));
+});
