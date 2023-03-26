@@ -55,6 +55,8 @@ In production `get_module_path` and `_vue_assets.html.erb` will behave the same 
 1. Run `./build.sh` in the ROOT directory. This also runs a Vue3 build.
 2. `RAILS_ENV=production RAILS_SERVE_STATIC_ASSETS=true rails server`
 
+You'll need to put this behind a load balancer with HTTPS in order to install the service worker and enable offline functionality.
+
 ## Environment Setup
 
 We have tested on Ubuntu 22 with rbenv and Node 16
