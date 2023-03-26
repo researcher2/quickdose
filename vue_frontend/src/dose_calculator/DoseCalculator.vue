@@ -3,6 +3,7 @@
   import { onMounted, reactive, watch, computed } from 'vue'
   import slider from "vue3-slider"
   import {calculate_dose, type Dataset} from "./calculations"
+  import TextAndSlider from "./TextAndSlider.vue"
 
   interface State
   {
@@ -55,6 +56,8 @@
     dose: 0,
   });
 
+  // Computed Values
+  // ==========================================================================
   const af_formula_1 = computed(() =>
   {
     if (state.dataset == null)
@@ -96,6 +99,8 @@
   })
 
 
+  // Reactive Watchers
+  // ==========================================================================
   watch(() => [state.monitor_units, state.field_size_x, state.field_size_y, state.depth, state.ssd], async (new_data, old_data) =>
   {
     state.dose = 0;
@@ -105,7 +110,41 @@
     state.pdd_area_pair = null;
   })
 
+  watch(() => [state.brand, state.energy], async (new_data, old_data) => 
+  {
+    set_defaults()
+  });
 
+
+  // Validations
+  // ==========================================================================
+  interface Configuration
+  {
+    default: number
+    min: number
+    max: number
+    step: number
+  }
+
+  function validate_min_max(value: number, configuration: Configuration)
+  {
+    return value <= configuration.max && value >= configuration.min
+  }
+
+  const valid_monitor_units = computed(() => validate_min_max(state.monitor_units, input_settings.monitor_units));
+  const valid_field_size_x = computed(() => validate_min_max(state.field_size_x, input_settings.field_size_x));
+  const valid_field_size_y = computed(() => validate_min_max(state.field_size_y, input_settings.field_size_y));
+  const valid_depth = computed(() => validate_min_max(state.depth, input_settings.depth[state.brand][state.energy]));
+  const valid_ssd = computed(() => validate_min_max(state.ssd, input_settings.ssd));
+
+  const all_valid = computed(() =>
+  {
+    return valid_monitor_units.value && valid_field_size_x.value && valid_field_size_y.value &&
+           valid_depth.value && valid_ssd.value;
+  });
+
+  // Configuration
+  // ==========================================================================
   const slider_color = "#FB278D";
   const track_color = "#FEFEFE";
   const slider_handle_scale = 3;
@@ -121,8 +160,6 @@
       "10": 2.2
     },     
   }
-  // Example template ref
-  // const el = ref<HTMLInputElement | null>(null)
 
   let input_settings = {
     monitor_units: {default: 100, min: 0, max: 1000, step: 0.5},
@@ -145,6 +182,9 @@
 
   const calibration_constant = 0.01
 
+
+  // Functions
+  // ==========================================================================
   async function do_calculations()
   {
     const results = (calculate_dose(state.brand, state.energy, state.monitor_units, state.field_size_x, 
@@ -155,7 +195,7 @@
     state.ssdf = results.ssdf;
     state.af = results.af;
     state.af_pair = results.af_pair;
-    state.pdd_area_pair =results.pdd_area_pair;
+    state.pdd_area_pair = results.pdd_area_pair;
     state.pdd_depth_pair = results.pdd_depth_pair;
     state.dataset = results.dataset;
     state.dose = results.dose;    
@@ -169,11 +209,6 @@
     state.depth = input_settings.depth[state.brand][state.energy].default;
     state.ssd = input_settings.ssd.default;
   }
-
-  watch(() => [state.brand, state.energy], async (new_data, old_data) => 
-  {
-    set_defaults()
-  });
 
   async function startup()
   {
@@ -215,66 +250,46 @@
     <hr>
 
     <template v-if="state.loaded">
-      <div class="number_input">
-        <label>Monitor Units</label>
-        <div class="value_and_slider">
-          <input type="number" v-model="state.monitor_units">
-          <slider v-model="state.monitor_units" :color="slider_color" :track-color="track_color"
-                  :alwaysShowHandle="true" :handleScale="slider_handle_scale" :height="slider_height"
+      <TextAndSlider label="Monitor Units"
+                  v-model="state.monitor_units" :slider_color="slider_color" :track_color="track_color"
+                  :slider_handle_scale="slider_handle_scale" :slider_height="slider_height"
                   :min="input_settings.monitor_units.min" :max="input_settings.monitor_units.max"
-                  :step="input_settings.monitor_units.step" />
-        </div>
-      </div>
+                  :step="input_settings.monitor_units.step">
+      </TextAndSlider>
 
-      <div class="number_input">
-        <label>Field Size - X (cm)</label>
-        <div class="value_and_slider">
-          <input type="number" v-model="state.field_size_x">
-          <slider v-model="state.field_size_x" :color="slider_color" :track-color="track_color"
-                  :alwaysShowHandle="true" :handleScale="slider_handle_scale" :height="slider_height"
+      <TextAndSlider label="Field Size - X (cm)"
+                  v-model="state.field_size_x" :slider_color="slider_color" :track_color="track_color"
+                  :slider_handle_scale="slider_handle_scale" :slider_height="slider_height"
                   :min="input_settings.field_size_x.min" :max="input_settings.field_size_x.max"
-                  :step="input_settings.field_size_x.step" />
-        </div>
-      </div>
+                  :step="input_settings.field_size_x.step">
+      </TextAndSlider>
 
-      <div class="number_input">
-        <label>Field Size - Y (cm)</label>
-        <div class="value_and_slider">
-          <input type="number" v-model="state.field_size_y">
-          <slider v-model="state.field_size_y" :color="slider_color" :track-color="track_color"
-                  :alwaysShowHandle="true" :handleScale="slider_handle_scale" :height="slider_height"
+      <TextAndSlider label="Field Size - Y (cm)"
+                  v-model="state.field_size_y" :slider_color="slider_color" :track_color="track_color"
+                  :slider_handle_scale="slider_handle_scale" :slider_height="slider_height"
                   :min="input_settings.field_size_y.min" :max="input_settings.field_size_y.max"
-                  :step="input_settings.field_size_y.step" />
-        </div>
-      </div>
+                  :step="input_settings.field_size_y.step">
+      </TextAndSlider>
 
-      <div class="number_input">
-        <label>Depth (cm)</label>
-        <div class="value_and_slider">
-          <input type="number" v-model="state.depth">
-          <slider v-model="state.depth" :color="slider_color" :track-color="track_color"
-                  :alwaysShowHandle="true" :handleScale="slider_handle_scale" :height="slider_height"
+      <TextAndSlider label="Depth (cm)"
+                  v-model="state.depth" :slider_color="slider_color" :track_color="track_color"
+                  :slider_handle_scale="slider_handle_scale" :slider_height="slider_height"
                   :min="input_settings.depth[state.brand][state.energy].min" 
                   :max="input_settings.depth[state.brand][state.energy].max"
-                  :step="input_settings.depth[state.brand][state.energy].step" />
-        </div>
-      </div>
+                  :step="input_settings.depth[state.brand][state.energy].step">
+      </TextAndSlider>
 
-      <div class="number_input">
-        <label>SSD (cm)</label>
-        <div class="value_and_slider">
-          <input type="number" v-model="state.ssd">
-          <slider v-model="state.ssd" :color="slider_color" :track-color="track_color"
-                  :alwaysShowHandle="true" :handleScale="slider_handle_scale" :height="slider_height"
+      <TextAndSlider label="SSD (cm)"
+                  v-model="state.ssd" :slider_color="slider_color" :track_color="track_color"
+                  :slider_handle_scale="slider_handle_scale" :slider_height="slider_height"
                   :min="input_settings.ssd.min" :max="input_settings.ssd.max"
-                  :step="input_settings.ssd.step" />
-        </div>
-      </div>
+                  :step="input_settings.ssd.step">
+      </TextAndSlider>
     </template>
 
-    <button @click="do_calculations()">CALCULATE</button>
+    <button @click="do_calculations()" :disabled="!all_valid">CALCULATE</button>
 
-    <div id="dose">Dose = {{ scaled_dose }}{{ dose_unit }}</div>
+    <div id="dose">Dose = {{ scaled_dose.toFixed(2) }}{{ dose_unit }}</div>
 
     <div class="explanation_section">  
       <math-jax latex="TD = {}\frac{MU * K * PDD * F * SSDF}{AF * 100}"></math-jax>
@@ -350,6 +365,11 @@
   html, body
   {
     font-family: -apple-system, blinkmacsystemfont, Segoe UI, roboto, oxygen, ubuntu, cantarell, Open Sans, Helvetica Neue, sans-serif
+  }
+
+  body
+  {
+    overflow: scroll;    
   }
 
   h1 {

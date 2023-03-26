@@ -46,6 +46,12 @@ interface Point
     y: number
 }
 
+interface IndexPair
+{
+    lower_index: number
+    upper_index: number
+}
+
 interface Result
 {
     pdd: number
@@ -143,12 +149,6 @@ function calculate_pdd (dataset: Dataset, field_size_x: number, field_size_y: nu
     pdd = linear_interpolate(lower, upper, surface_field_size)
 
     return {pdd: pdd, area_pair: area_pair, depth_pair: depth_pair};
-}
-
-interface IndexPair
-{
-    lower_index: number
-    upper_index: number
 }
 
 function find_area_pair(rows: Array<Array<number>>, surface_field_size: number): IndexPair
